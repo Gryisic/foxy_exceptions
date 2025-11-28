@@ -10,7 +10,7 @@ from .http_client import SyncHTTPClient
 from .logger import logger
 
 
-class ErrorNotifierSync:
+class SyncErrorNotifier:
     _SENTINEL = object()
 
     def __init__(self, config: NotifierConfig):
