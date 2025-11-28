@@ -1,24 +1,22 @@
 import asyncio
 import traceback
-from typing import Optional
+from typing import Optional, Any
 
+from .base_notifier import BaseNotifier
 from .config import NotifierConfig
 from .dedupe import ErrorDedupe
 from .http_client import AsyncHTTPClient
 from .logger import logger
 
 
-class AsyncErrorNotifier:
+class AsyncErrorNotifier(BaseNotifier):
     _SENTINEL = object()
 
     def __init__(self, config: NotifierConfig):
         self.config = config
         self.queue = asyncio.Queue(maxsize=config.max_queue_size)
         self.dedupe = ErrorDedupe(ttl=config.dedupe_ttl)
-        self.http = AsyncHTTPClient(
-            timeout=config.timeout,
-            headers=config.http_headers,
-        )
+        self.http = AsyncHTTPClient(timeout=config.timeout, headers=config.http_headers)
         self._worker_task: Optional[asyncio.Task] = None
 
     def start(self):
@@ -44,10 +42,11 @@ class AsyncErrorNotifier:
 
         logger.debug("AsyncErrorNotifier worker stopped")
 
-    async def notify(self, source: str, exc: Exception, meta: Optional[dict] = None):
+    async def notify(self, source: Any, exc: Exception, meta: Optional[dict] = None):
         if not self.config.enabled:
             return
 
+        src = self._normalize_source(source)
         text = f"{exc.__class__.__name__}: {exc}"
 
         if not self.dedupe.should_send(text):
@@ -55,7 +54,7 @@ class AsyncErrorNotifier:
             return
 
         payload = {
-            "source": source,
+            "source": src,
             "error": text,
             "traceback": "".join(traceback.format_exception(type(exc), exc, exc.__traceback__)),
             "meta": meta,
@@ -71,7 +70,6 @@ class AsyncErrorNotifier:
     async def _worker(self):
         while True:
             payload = await self.queue.get()
-
             if payload is self._SENTINEL:
                 break
 

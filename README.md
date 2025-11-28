@@ -83,7 +83,7 @@ notifier.stop()
 # 🧩 Celery (через адаптер)
 
 ```python
-from foxy_exceptions.adapters.celery_adapter import attach_celery_handler
+from foxy_exceptions.adapters import attach_celery_handler
 from foxy_exceptions import AsyncErrorNotifier, NotifierConfig
 
 notifier = AsyncErrorNotifier(NotifierConfig(...))

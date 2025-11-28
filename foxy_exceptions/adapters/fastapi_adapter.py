@@ -13,5 +13,5 @@ class NotifierMiddleware(BaseHTTPMiddleware):
         try:
             return await call_next(request)
         except Exception as exc:
-            await self.notifier.notify(exc, context=request.url.path)
+            await self.notifier.notify(request.app, exc)
             raise

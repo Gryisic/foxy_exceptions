@@ -2,27 +2,23 @@ import threading
 import queue
 import time
 import traceback
-from typing import Optional
+from typing import Optional, Any
 
+from .base_notifier import BaseNotifier
 from .config import NotifierConfig
 from .dedupe import ErrorDedupe
 from .http_client import SyncHTTPClient
 from .logger import logger
 
 
-class SyncErrorNotifier:
+class SyncErrorNotifier(BaseNotifier):
     _SENTINEL = object()
 
     def __init__(self, config: NotifierConfig):
         self.config = config
-
         self.queue = queue.Queue(maxsize=config.max_queue_size)
         self.dedupe = ErrorDedupe(ttl=config.dedupe_ttl)
-        self.http = SyncHTTPClient(
-            timeout=config.timeout,
-            headers=config.http_headers,
-        )
-
+        self.http = SyncHTTPClient(timeout=config.timeout, headers=config.http_headers)
         self._thread = threading.Thread(target=self._worker, daemon=True)
         self._running = False
 
@@ -45,17 +41,19 @@ class SyncErrorNotifier:
 
         logger.debug("ErrorNotifierSync worker thread stopped")
 
-    def notify(self, source: str, exc: Exception, meta: Optional[dict] = None):
+    def notify(self, source: Any, exc: Exception, meta: Optional[dict] = None):
         if not self.config.enabled:
             return
 
+        src = self._normalize_source(source)
         text = f"{exc.__class__.__name__}: {exc}"
 
         if not self.dedupe.should_send(text):
+            logger.debug(f"Dedupe: skip repeated error: {text}")
             return
 
         payload = {
-            "source": source,
+            "source": src,
             "error": text,
             "traceback": "".join(traceback.format_exception(type(exc), exc, exc.__traceback__)),
             "meta": meta,
@@ -71,7 +69,6 @@ class SyncErrorNotifier:
     def _worker(self):
         while True:
             payload = self.queue.get()
-
             if payload is self._SENTINEL:
                 break
 
@@ -85,7 +82,6 @@ class SyncErrorNotifier:
 
         for attempt in range(1, self.config.retry_attempts + 1):
             ok = self.http.post_json(self.config.endpoint_url, payload)
-
             if ok:
                 return
 

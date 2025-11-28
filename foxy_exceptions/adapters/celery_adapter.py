@@ -6,4 +6,4 @@ def attach_celery_handler(app, notifier):
 
     @task_failure.connect
     def on_task_failure(sender=None, exception=None, traceback=None, **kwargs):
-        notifier.notify(exception, context=sender.name)
+        notifier.notify(sender.name, exception, kwargs)
